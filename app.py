@@ -51,17 +51,18 @@ def scrape_data(username, password, use_sso, case_numbers, status_placeholder):
         wait = WebDriverWait(driver, 20)
         
         status_placeholder.info("Giriş sayfasına yönlendiriliyor...")
+        # YENİ: Butonu daha güvenilir olan ID'si ile bul
         daimler_login_button = wait.until(EC.element_to_be_clickable(
-            (By.XPATH, "//a[contains(., 'Login with Daimler Truck Account')]")
+            (By.ID, "CorptbExchange")
         ))
         daimler_login_button.click()
 
-        # YENİ: Kullanıcı adını otomatik tamamla
+        # Kullanıcı adını otomatik tamamla
         full_username = username.strip()
         if '@' not in full_username:
             full_username += '@tbdir.net'
 
-        # YENİ: Giriş yöntemine göre dallanan mantık
+        # Giriş yöntemine göre dallanan mantık
         if use_sso:
             # --- OTOMATİK (SSO) GİRİŞ DENEMESİ ---
             try:
