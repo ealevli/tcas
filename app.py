@@ -136,7 +136,7 @@ def set_bg_from_local(image_file):
     bg_image_style = f"""
     <style>
     .stApp {{
-        background-image: url("data:{image_type};base64,{image_as_base64}");
+        background-image: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url("data:{image_type};base64,{image_as_base64}");
         background-size: cover;
     }}
     </style>
