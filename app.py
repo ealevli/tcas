@@ -125,19 +125,26 @@ st.set_page_config(page_title="S24H Veri Çekme Aracı", layout="wide")
 
 # Arka plan resmini ayarla
 def set_bg_from_local(image_file):
+    # Dosya uzantısından dosya türünü belirle (png, jpg, jpeg destekler)
+    file_extension = image_file.split('.')[-1].lower()
+    if file_extension in ['jpg', 'jpeg']:
+        image_type = 'image/jpeg'
+    else:
+        image_type = 'image/png' # Varsayılan olarak veya diğer durumlar için png
+
     image_as_base64 = get_base64_of_bin_file(image_file)
     bg_image_style = f"""
     <style>
     .stApp {{
-        background-image: url("data:image/png;base64,{image_as_base64}");
+        background-image: url("data:{image_type};base64,{image_as_base64}");
         background-size: cover;
     }}
     </style>
     """
     st.markdown(bg_image_style, unsafe_allow_html=True)
 
-# assets klasöründeki arka plan resmini kullan
-set_bg_from_local("assets/background.png")
+# assets klasöründeki arka plan resmini kullan (Dosya adını .jpg olarak değiştirebilirsiniz)
+set_bg_from_local("assets/background.jpg")
 
 
 # Logoyu ortalamak için sütunlar oluştur ve logoyu ekle
