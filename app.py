@@ -9,7 +9,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import WebDriverException
+from selenium.common.exceptions import WebDriverException, TimeoutException
 
 # Resim dosyasını Base64 formatına çeviren fonksiyon
 @st.cache_data
@@ -19,7 +19,7 @@ def get_base64_of_bin_file(bin_file):
     return base64.b64encode(data).decode()
 
 # scrape_data fonksiyonunun en güncel hali
-def scrape_data(username, password, case_numbers, status_placeholder):
+def scrape_data(username, password, use_sso, case_numbers, status_placeholder):
     scraped_data = []
     driver = None
     
@@ -28,17 +28,13 @@ def scrape_data(username, password, case_numbers, status_placeholder):
         
         # --- Headless mod için Chrome ayarları ---
         options = webdriver.ChromeOptions()
-        options.add_argument("--headless") # Tarayıcıyı görünmez modda çalıştırır
-        options.add_argument("--no-sandbox") # Sunucu ortamlarında gerekli bir güvenlik ayarı
-        options.add_argument("--disable-dev-shm-usage") # Bellek kullanımıyla ilgili sorunları önler
-        options.add_argument("--disable-gpu") # Sunucuda GPU olmadığı için kapatılır
+        options.add_argument("--headless")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
         
-        # Servis ve ayarları birleştirerek sürücüyü başlat
         driver = webdriver.Chrome(options=options)
-        
-        # --------------------------------------------------
-        
-        driver.maximize_window() # Headless modda bu satırın etkisi olmayabilir ama kalmasında zarar yok
+        driver.maximize_window()
         
         LOGIN_URL = "https://dtag.tcas.cloud.tbintra.net/siebel/app/callcenter/enu/"
         
@@ -52,28 +48,50 @@ def scrape_data(username, password, case_numbers, status_placeholder):
             else:
                 raise e
 
-        # ... fonksiyonun geri kalanı (giriş yapma, arama, veri çekme) aynı kalacak ...
         wait = WebDriverWait(driver, 20)
         
-        status_placeholder.info("1/3: 'Daimler Truck Account' ile giriş butonu aranıyor...")
+        status_placeholder.info("Giriş sayfasına yönlendiriliyor...")
         daimler_login_button = wait.until(EC.element_to_be_clickable(
             (By.XPATH, "//a[contains(., 'Login with Daimler Truck Account')]")
         ))
         daimler_login_button.click()
 
-        status_placeholder.info("2/3: Kullanıcı adı alanı aranıyor...")
-        userid_field = wait.until(EC.presence_of_element_located((By.NAME, "login_id")))
-        userid_field.send_keys(username)
-        
-        next_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[text()='İleri']")))
-        next_button.click()
+        # YENİ: Kullanıcı adını otomatik tamamla
+        full_username = username.strip()
+        if '@' not in full_username:
+            full_username += '@tbdir.net'
 
-        status_placeholder.info("3/3: Şifre alanı aranıyor...")
-        password_field = wait.until(EC.presence_of_element_located((By.NAME, "password")))
-        password_field.send_keys(password)
-        
-        final_login_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[text()='Oturum aç']")))
-        final_login_button.click()
+        # YENİ: Giriş yöntemine göre dallanan mantık
+        if use_sso:
+            # --- OTOMATİK (SSO) GİRİŞ DENEMESİ ---
+            try:
+                status_placeholder.info(f"Otomatik giriş deneniyor ({full_username})...")
+                account_tile = wait.until(EC.element_to_be_clickable(
+                    (By.XPATH, f"//div[contains(., '{full_username}')]")
+                ))
+                account_tile.click()
+            except TimeoutException:
+                status_placeholder.error("❌ Otomatik giriş başarısız. Lütfen 'SSO' seçeneğinin işaretini kaldırıp şifrenizle manuel giriş yapmayı deneyin.")
+                return []
+        else:
+            # --- MANUEL (ŞİFRE İLE) GİRİŞ ---
+            if not password:
+                status_placeholder.error("❌ Manuel giriş için şifre girmelisiniz.")
+                return []
+            
+            status_placeholder.info(f"Manuel giriş yapılıyor ({full_username})...")
+            userid_field = wait.until(EC.presence_of_element_located((By.NAME, "login_id")))
+            userid_field.send_keys(full_username)
+            
+            next_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[text()='İleri']")))
+            next_button.click()
+
+            status_placeholder.info("Şifre giriliyor...")
+            password_field = wait.until(EC.presence_of_element_located((By.NAME, "password")))
+            password_field.send_keys(password)
+            
+            final_login_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[text()='Oturum aç']")))
+            final_login_button.click()
         
         status_placeholder.success("✅ Giriş yapıldı, ana sayfa bekleniyor...")
         
@@ -123,14 +141,12 @@ def scrape_data(username, password, case_numbers, status_placeholder):
 # --- STREAMLIT ARAYÜZ KISMI ---
 st.set_page_config(page_title="S24H Veri Çekme Aracı", layout="wide")
 
-# Arka plan resmini ayarla
 def set_bg_from_local(image_file):
-    # Dosya uzantısından dosya türünü belirle (png, jpg, jpeg destekler)
     file_extension = image_file.split('.')[-1].lower()
     if file_extension in ['jpg', 'jpeg']:
         image_type = 'image/jpeg'
     else:
-        image_type = 'image/png' # Varsayılan olarak veya diğer durumlar için png
+        image_type = 'image/png'
 
     image_as_base64 = get_base64_of_bin_file(image_file)
     bg_image_style = f"""
@@ -139,7 +155,6 @@ def set_bg_from_local(image_file):
         background-image: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url("data:{image_type};base64,{image_as_base64}");
         background-size: cover;
     }}
-    /* Streamlit'in varsayılan metin ve etiket renklerini beyaz yap */
     label, h2, h3 {{
         color: white !important;
     }}
@@ -147,17 +162,13 @@ def set_bg_from_local(image_file):
     """
     st.markdown(bg_image_style, unsafe_allow_html=True)
 
-# assets klasöründeki arka plan resmini kullan (Dosya adını .jpg olarak değiştirebilirsiniz)
 set_bg_from_local("assets/background.jpg")
 
-
-# Başlığı ortalamak için markdown kullan
 st.markdown("<h1 style='text-align: center; color: white;'>S24H Veri Çekme Otomasyon Aracı</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: white;'>Bu araç, bir Excel dosyasından okuduğu vaka numaralarına ait bilgileri otomatik olarak çeker.</p>", unsafe_allow_html=True)
 
 st.warning("**ÖNEMLİ:** Bu uygulamayı çalıştırmadan önce **şirket VPN bağlantınızın aktif olduğundan** emin olun!")
 
-# Form ve dosya yükleme kısmı
 uploaded_file = st.file_uploader(
     "Vaka numaralarını içeren Excel dosyasını yükleyin (.xlsx, .xls)", 
     type=["xlsx", "xls"]
@@ -174,9 +185,17 @@ if uploaded_file is not None:
 
         with st.form("input_form"):
             st.markdown("---")
-            st.subheader("Giriş Bilgileri")
-            username = st.text_input("TBDIR Uzantılı Kullanıcı Adı")
-            password = st.text_input("Şifre", type="password")
+            st.subheader("Giriş Yöntemi")
+            
+            # YENİ: Giriş yöntemini seçmek için checkbox
+            use_sso = st.checkbox("SSO ile otomatik giriş yap (Önerilen)", value=True)
+            
+            username = st.text_input("Kullanıcı Adı (örn: ealevli)")
+            
+            # YENİ: Şifre alanı sadece manuel giriş seçilirse gösterilir
+            password = ""
+            if not use_sso:
+                password = st.text_input("Şifre", type="password")
             
             submitted = st.form_submit_button("İşlemi Başlat")
 
@@ -184,15 +203,15 @@ if uploaded_file is not None:
         results_placeholder = st.empty()
 
         if submitted:
-            if not username or not password:
-                st.error("Lütfen giriş bilgilerinizi eksiksiz doldurun.")
+            if not username:
+                st.error("Lütfen kullanıcı adınızı girin.")
             else:
                 case_list = df[selected_column].dropna().astype(str).tolist()
                 
                 if not case_list:
                     st.error("Seçtiğiniz sütunda hiç vaka numarası bulunamadı.")
                 else:
-                    final_data = scrape_data(username, password, case_list, status_placeholder)
+                    final_data = scrape_data(username, password, use_sso, case_list, status_placeholder)
                     
                     if final_data:
                         result_df = pd.DataFrame(final_data)
