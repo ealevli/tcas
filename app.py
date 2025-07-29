@@ -139,6 +139,10 @@ def set_bg_from_local(image_file):
         background-image: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url("data:{image_type};base64,{image_as_base64}");
         background-size: cover;
     }}
+    /* Streamlit'in varsayılan metin ve etiket renklerini beyaz yap */
+    label, h2, h3 {{
+        color: white !important;
+    }}
     </style>
     """
     st.markdown(bg_image_style, unsafe_allow_html=True)
