@@ -2,42 +2,59 @@ import streamlit as st
 import pandas as pd
 import time
 import io
+import base64 # Arka planı kodlamak için
 
+# Selenium kütüphaneleri
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-# YENİ: Özel hata yakalama için WebDriverException'ı içe aktar
 from selenium.common.exceptions import WebDriverException
 
-# Bu fonksiyon, asıl veri çekme işlemini yapacak
+# Resim dosyasını Base64 formatına çeviren fonksiyon
+@st.cache_data
+def get_base64_of_bin_file(bin_file):
+    with open(bin_file, 'rb') as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
+# scrape_data fonksiyonunun en güncel hali
 def scrape_data(username, password, case_numbers, status_placeholder):
     scraped_data = []
     driver = None
     
     try:
-        status_placeholder.info("🚀 Tarayıcı başlatılıyor...")
-        driver = webdriver.Chrome()
-        driver.maximize_window()
+        status_placeholder.info("🚀 Sunucu ortamı için tarayıcı hazırlanıyor...")
+        
+        # --- Headless mod için Chrome ayarları ---
+        options = webdriver.ChromeOptions()
+        options.add_argument("--headless") # Tarayıcıyı görünmez modda çalıştırır
+        options.add_argument("--no-sandbox") # Sunucu ortamlarında gerekli bir güvenlik ayarı
+        options.add_argument("--disable-dev-shm-usage") # Bellek kullanımıyla ilgili sorunları önler
+        options.add_argument("--disable-gpu") # Sunucuda GPU olmadığı için kapatılır
+        
+        # Servis ve ayarları birleştirerek sürücüyü başlat
+        driver = webdriver.Chrome(options=options)
+        
+        # --------------------------------------------------
+        
+        driver.maximize_window() # Headless modda bu satırın etkisi olmayabilir ama kalmasında zarar yok
         
         LOGIN_URL = "https://dtag.tcas.cloud.tbintra.net/siebel/app/callcenter/enu/"
         
-        # YENİ: Ağ/VPN hatasını yakalamak için try-except bloğu
         try:
             status_placeholder.info(f"🔗 Ana giriş sayfasına gidiliyor...")
             driver.get(LOGIN_URL)
         except WebDriverException as e:
-            # Eğer hata mesajı bir ağ hatası içeriyorsa (site bulunamadı, zaman aşımı vb.)
             if "net::" in str(e) or "timeout" in str(e):
                 status_placeholder.error("❌ HATA: Yetkisiz Bilgisayar / VPN'i kontrol edin")
-                return [] # Fonksiyonu boş bir listeyle sonlandır
+                return []
             else:
-                # Başka bir WebDriver hatası ise, genel mesajı göster
                 raise e
 
+        # ... fonksiyonun geri kalanı (giriş yapma, arama, veri çekme) aynı kalacak ...
         wait = WebDriverWait(driver, 20)
         
-        # --- GİRİŞ ADIMLARI ---
         status_placeholder.info("1/3: 'Daimler Truck Account' ile giriş butonu aranıyor...")
         daimler_login_button = wait.until(EC.element_to_be_clickable(
             (By.XPATH, "//a[contains(., 'Login with Daimler Truck Account')]")
@@ -103,21 +120,39 @@ def scrape_data(username, password, case_numbers, status_placeholder):
         if driver:
             driver.quit()
 
-# --- STREAMLIT ARAYÜZ KISMI (GÜNCELLENDİ) ---
+# --- STREAMLIT ARAYÜZ KISMI ---
 st.set_page_config(page_title="S24H Veri Çekme Aracı", layout="wide")
 
-# YENİ: Logoyu ortalamak için sütunlar oluştur ve logoyu ekle
-col1, col2, col3 = st.columns([2,3,2]) # Ortadaki sütun daha geniş
-with col2:
-    # Daimler Truck logosunun URL'si
-    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/d/d3/Daimler_Truck_logo.svg/1280px-Daimler_Truck_logo.svg.png")
+# Arka plan resmini ayarla
+def set_bg_from_local(image_file):
+    image_as_base64 = get_base64_of_bin_file(image_file)
+    bg_image_style = f"""
+    <style>
+    .stApp {{
+        background-image: url("data:image/png;base64,{image_as_base64}");
+        background-size: cover;
+    }}
+    </style>
+    """
+    st.markdown(bg_image_style, unsafe_allow_html=True)
 
-# YENİ: Başlığı ortalamak için markdown kullan
-st.markdown("<h1 style='text-align: center;'>S24H Veri Çekme Otomasyon Aracı</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center;'>Bu araç, bir Excel dosyasından okuduğu vaka numaralarına ait bilgileri otomatik olarak çeker.</p>", unsafe_allow_html=True)
+# assets klasöründeki arka plan resmini kullan
+set_bg_from_local("assets/background.png")
+
+
+# Logoyu ortalamak için sütunlar oluştur ve logoyu ekle
+col1, col2, col3 = st.columns([2,3,2])
+with col2:
+    # assets klasöründeki logoyu kullan
+    st.image("assets/logo.png")
+
+# Başlığı ortalamak için markdown kullan
+st.markdown("<h1 style='text-align: center; color: white;'>S24H Veri Çekme Otomasyon Aracı</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: white;'>Bu araç, bir Excel dosyasından okuduğu vaka numaralarına ait bilgileri otomatik olarak çeker.</p>", unsafe_allow_html=True)
 
 st.warning("**ÖNEMLİ:** Bu uygulamayı çalıştırmadan önce **şirket VPN bağlantınızın aktif olduğundan** emin olun!")
 
+# Form ve dosya yükleme kısmı
 uploaded_file = st.file_uploader(
     "Vaka numaralarını içeren Excel dosyasını yükleyin (.xlsx, .xls)", 
     type=["xlsx", "xls"]
