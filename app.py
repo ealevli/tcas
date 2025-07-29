@@ -147,12 +147,6 @@ def set_bg_from_local(image_file):
 set_bg_from_local("assets/background.jpg")
 
 
-# Logoyu ortalamak için sütunlar oluştur ve logoyu ekle
-col1, col2, col3 = st.columns([2,3,2])
-with col2:
-    # assets klasöründeki logoyu kullan
-    st.image("assets/logo.png")
-
 # Başlığı ortalamak için markdown kullan
 st.markdown("<h1 style='text-align: center; color: white;'>S24H Veri Çekme Otomasyon Aracı</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: white;'>Bu araç, bir Excel dosyasından okuduğu vaka numaralarına ait bilgileri otomatik olarak çeker.</p>", unsafe_allow_html=True)
